@@ -159,27 +159,25 @@ func StartWorkerPool() {
 			}
 			wp.Submit(task)
 		}
-		close(wp.taskCh)
+		wp.Shutdown()
 	}()
 
 	for res := range wp.resultCh {
 		fmt.Printf("Received task %d, data: %s\n", res.TaskID, res.Value)
 	}
-
-	wp.Shutdown()
 }
 
 // NewWorkerPool creates a new worker pool with the given number of workers
-func NewWorkerPool(ctx context.Context, numWorkers int) *WorkerPool {
+func NewWorkerPool(ctx context.Context, workersNum int) *WorkerPool {
 	ctxCancellable, cancel := context.WithCancel(ctx)
 	wp := &WorkerPool{
-		taskCh:   make(chan Task),
-		resultCh: make(chan Result),
+		taskCh:   make(chan Task, workersNum),
+		resultCh: make(chan Result, workersNum),
 		ctx:      ctxCancellable,
 		cancel:   cancel,
 	}
 
-	for i := 0; i < numWorkers; i++ {
+	for i := range workersNum {
 		wp.wg.Go(func() {
 			for {
 				select {
@@ -192,22 +190,17 @@ func NewWorkerPool(ctx context.Context, numWorkers int) *WorkerPool {
 					res := processingTask(t)
 					select {
 					case wp.resultCh <- res:
-					case <-ctxCancellable.Done():
+					case <-wp.ctx.Done():
 						fmt.Printf("Worker %d is about to stop...\n", i+1)
 					}
 
-				case <-ctxCancellable.Done():
+				case <-wp.ctx.Done():
 					fmt.Printf("Worker %d is about to stop...\n", i+1)
 					return
 				}
 			}
 		})
 	}
-
-	go func() {
-		wp.wg.Wait()
-		close(wp.resultCh)
-	}()
 
 	return wp
 }
@@ -229,10 +222,14 @@ func (wp *WorkerPool) Results() <-chan Result {
 
 // Shutdown gracefully shuts down the pool, waiting for all tasks to complete
 func (wp *WorkerPool) Shutdown() {
+	close(wp.taskCh)
+	wp.wg.Wait()
+	close(wp.resultCh)
 	wp.cancel()
 }
 
 func processingTask(task Task) Result {
+	time.Sleep(1 * time.Millisecond)
 	return Result{
 		TaskID: task.ID,
 		Value:  task.Data,
