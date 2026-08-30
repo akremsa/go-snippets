@@ -122,3 +122,119 @@ func printer(ctx context.Context, in <-chan int) {
 		}
 	}
 }
+
+// Worker pool
+
+// Task represents a unit of work
+type Task struct {
+	ID   int
+	Data string
+}
+
+// Result represents the outcome of a task
+type Result struct {
+	TaskID int
+	Value  string
+	Err    error
+}
+
+// WorkerPool manages the worker goroutines
+type WorkerPool struct {
+	taskCh   chan Task
+	resultCh chan Result
+	wg       sync.WaitGroup
+	ctx      context.Context
+	cancel   context.CancelFunc
+}
+
+func StartWorkerPool() {
+	workersNum := 5
+	wp := NewWorkerPool(context.Background(), workersNum)
+
+	go func() {
+		for i := range 5 {
+			task := Task{
+				ID:   i,
+				Data: fmt.Sprintf("Test data - %d", i),
+			}
+			wp.Submit(task)
+		}
+		close(wp.taskCh)
+	}()
+
+	for res := range wp.resultCh {
+		fmt.Printf("Received task %d, data: %s\n", res.TaskID, res.Value)
+	}
+
+	wp.Shutdown()
+}
+
+// NewWorkerPool creates a new worker pool with the given number of workers
+func NewWorkerPool(ctx context.Context, numWorkers int) *WorkerPool {
+	ctxCancellable, cancel := context.WithCancel(ctx)
+	wp := &WorkerPool{
+		taskCh:   make(chan Task),
+		resultCh: make(chan Result),
+		ctx:      ctxCancellable,
+		cancel:   cancel,
+	}
+
+	for i := 0; i < numWorkers; i++ {
+		wp.wg.Go(func() {
+			for {
+				select {
+				case t, ok := <-wp.taskCh:
+					if !ok {
+						fmt.Println("Task channel is closed, exiting...")
+						return
+					}
+					fmt.Printf("Worker #%d: Processing taskID: %d, data: %s\n", i+1, t.ID, t.Data)
+					res := processingTask(t)
+					select {
+					case wp.resultCh <- res:
+					case <-ctxCancellable.Done():
+						fmt.Printf("Worker %d is about to stop...\n", i+1)
+					}
+
+				case <-ctxCancellable.Done():
+					fmt.Printf("Worker %d is about to stop...\n", i+1)
+					return
+				}
+			}
+		})
+	}
+
+	go func() {
+		wp.wg.Wait()
+		close(wp.resultCh)
+	}()
+
+	return wp
+}
+
+// Submit adds a task to the pool (non-blocking if buffer has space)
+func (wp *WorkerPool) Submit(task Task) {
+	select {
+	case wp.taskCh <- task:
+		fmt.Printf("Task %d submitted\n", task.ID)
+	case <-wp.ctx.Done():
+		fmt.Println("Submit cancelled...")
+	}
+}
+
+// Results returns a channel for reading results
+func (wp *WorkerPool) Results() <-chan Result {
+	return wp.resultCh
+}
+
+// Shutdown gracefully shuts down the pool, waiting for all tasks to complete
+func (wp *WorkerPool) Shutdown() {
+	wp.cancel()
+}
+
+func processingTask(task Task) Result {
+	return Result{
+		TaskID: task.ID,
+		Value:  task.Data,
+	}
+}

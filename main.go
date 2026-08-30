@@ -5,5 +5,5 @@ import (
 )
 
 func main() {
-	gopatterns.CreatePipeline()
+	gopatterns.StartWorkerPool()
 }
