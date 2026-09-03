@@ -3,9 +3,55 @@ package gopatterns
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 )
+
+// test blocked write in select
+func TestBlockedSelect() {
+	dataCh := make(chan int)
+	quitCh := make(chan struct{})
+
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		// log.Print("Starting reader...")
+		// for {
+		// 	select {
+		// 	case val := <-dataCh:
+		// 		log.Printf("Reader recevied value: %d", val)
+		// 	case <-quitCh:
+		// 		log.Print("Shutting down the reader...")
+		// 		return
+		// 	}
+		// }
+		log.Print("Starting writer...")
+		val := 3
+		i := 0
+		for {
+			log.Printf("Writer iteration %d", i)
+			i++
+			select {
+			case dataCh <- val:
+				log.Printf("Writer sent the value: %d", val)
+			case <-quitCh:
+				log.Print("Shutting down the writer...")
+				return
+			}
+		}
+	})
+
+	log.Print("Sleep...")
+	time.Sleep(2 * time.Second)
+	val := <-dataCh
+	log.Printf("Recevied value: %d", val)
+	log.Print("Sleep...")
+	time.Sleep(2 * time.Second)
+	log.Print("Close writer")
+	close(quitCh)
+	wg.Wait()
+	log.Print("Exit")
+}
 
 // Workers Pool
 

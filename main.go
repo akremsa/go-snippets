@@ -5,5 +5,5 @@ import (
 )
 
 func main() {
-	gopatterns.RunPubSub()
+	gopatterns.TestBlockedSelect()
 }
