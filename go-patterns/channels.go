@@ -11,7 +11,7 @@ import (
 
 func WorkersPool() {
 	var tasks []string
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		tasks = append(tasks, fmt.Sprintf("Task %d", i+1))
 	}
 	createPool(tasks, 5)
@@ -22,7 +22,7 @@ func createPool(tasks []string, workersNum int) {
 	var wg sync.WaitGroup
 
 	// start workers
-	for i := 0; i < workersNum; i++ {
+	for i := range workersNum {
 		wg.Go(func() {
 			// for {
 			// 	select {
@@ -66,7 +66,7 @@ func generator(ctx context.Context, count int) <-chan int {
 	squareCh := make(chan int)
 	go func() {
 		defer close(squareCh)
-		for i := 0; i < count; i++ {
+		for i := range count {
 			select {
 			case squareCh <- i + 1:
 			case <-ctx.Done():

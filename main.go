@@ -5,5 +5,5 @@ import (
 )
 
 func main() {
-	gopatterns.StartWorkerPool()
+	gopatterns.RunPubSub()
 }
