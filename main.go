@@ -5,5 +5,5 @@ import (
 )
 
 func main() {
-	gopatterns.TestBlockedSelect()
+	gopatterns.ErrorsIsAs()
 }

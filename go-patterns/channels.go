@@ -2,11 +2,47 @@ package gopatterns
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
 	"time"
 )
+
+type DatabaseError struct {
+	text string
+}
+
+func (c DatabaseError) Error() string {
+	return "Database error: " + c.text
+}
+
+func ErrorsIsAs() {
+	// is
+	var errNotFound = errors.New("not found")
+
+	err := fmt.Errorf("Error occured: %w", errNotFound)
+	if errors.Is(err, errNotFound) {
+		log.Printf("Custom error: %v", err)
+	} else {
+		log.Print("Unknown error")
+	}
+
+	// as
+	dbErr := DatabaseError{text: "Connection time out"}
+	err = fmt.Errorf("Error occured: %w", dbErr)
+	// var targetErr DatabaseError
+	// if errors.As(err, &targetErr) {
+	// 	log.Printf("Database error: %v", targetErr.text)
+	// } else {
+	// 	log.Print("Unknown error")
+	// }
+	if resErr, ok := errors.AsType[DatabaseError](err); ok {
+		log.Printf("Database error: %v", resErr.text)
+	} else {
+		log.Print("Unknown error")
+	}
+}
 
 // test blocked write in select
 func TestBlockedSelect() {
@@ -15,39 +51,51 @@ func TestBlockedSelect() {
 
 	var wg sync.WaitGroup
 	wg.Go(func() {
-		// log.Print("Starting reader...")
-		// for {
-		// 	select {
-		// 	case val := <-dataCh:
-		// 		log.Printf("Reader recevied value: %d", val)
-		// 	case <-quitCh:
-		// 		log.Print("Shutting down the reader...")
-		// 		return
-		// 	}
-		// }
-		log.Print("Starting writer...")
-		val := 3
-		i := 0
+		log.Print("Starting reader 1...")
 		for {
-			log.Printf("Writer iteration %d", i)
-			i++
 			select {
-			case dataCh <- val:
-				log.Printf("Writer sent the value: %d", val)
+			case val := <-dataCh:
+				log.Printf("Reader 1 recevied value: %d", val)
 			case <-quitCh:
-				log.Print("Shutting down the writer...")
+				log.Print("Shutting down the reader 1...")
 				return
 			}
 		}
 	})
 
-	log.Print("Sleep...")
-	time.Sleep(2 * time.Second)
-	val := <-dataCh
-	log.Printf("Recevied value: %d", val)
-	log.Print("Sleep...")
-	time.Sleep(2 * time.Second)
-	log.Print("Close writer")
+	wg.Go(func() {
+		log.Print("Starting reader 2...")
+		for {
+			select {
+			case val := <-dataCh:
+				log.Printf("Reader 2 recevied value: %d", val)
+			case <-quitCh:
+				log.Print("Shutting down the reader 2...")
+				return
+			}
+		}
+	})
+
+	wg.Go(func() {
+		log.Print("Starting writer...")
+		i := 0
+		for {
+			log.Printf("Writer iteration %d", i)
+			select {
+			case dataCh <- i:
+				log.Printf("Writer sent the value: %d", i)
+			case <-quitCh:
+				log.Print("Shutting down the writer...")
+				time.Sleep(2 * time.Second)
+				log.Print("Exit writer")
+				return
+			}
+			i++
+			time.Sleep(1 * time.Second)
+		}
+	})
+
+	time.Sleep(7 * time.Second)
 	close(quitCh)
 	wg.Wait()
 	log.Print("Exit")
